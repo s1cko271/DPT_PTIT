@@ -1,0 +1,32 @@
+# Thư viện xử lý âm thanh
+numpy>=1.20.0
+pandas>=1.3.0
+scipy>=1.7.0
+
+# Thư viện học máy
+scikit-learn==1.2.2
+
+# Thư viện giao diện web
+flask==2.3.2
+flask-wtf==1.1.1
+werkzeug==2.3.6
+
+# Thư viện cơ sở dữ liệu
+# sqlite3 is a built-in Python module, not a pip package
+
+# Thư viện trực quan hóa
+matplotlib>=3.5.0
+seaborn==0.12.2
+
+# Thư viện xử lý âm thanh bổ sung
+pydub==0.25.1
+soundfile==0.12.1
+
+# Thư viện tiện ích
+tqdm>=4.60.0
+joblib>=1.0.0
+
+# Thư viện khác
+mutagen>=1.45.0
+streamlit>=1.10.0
+pillow>=9.0.0
