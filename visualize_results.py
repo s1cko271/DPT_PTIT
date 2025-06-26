@@ -4,7 +4,7 @@ import os
 from audio_processing_pipeline import run_pipeline
 from modified_feature_extraction import extract_features
 
-def visualize_feature_comparison(input_audio, similar_songs, db_path="./music_features.db", 
+def visualize_feature_comparison(input_audio, similar_songs, db_path="./database/music_features_new.db", 
                                feature_names=None, title=None):
     """
     Trực quan hóa so sánh đặc trưng giữa file âm thanh đầu vào và các bài hát tương tự
@@ -208,7 +208,7 @@ def plot_processing_time(processing_times):
     
     return fig, ax
 
-def visualize_pipeline_results(input_audio_path, database_path="./music_features.db", 
+def visualize_pipeline_results(input_audio_path, database_path="./database/music_features_new.db", 
                              similarity_method="cosine", top_k=3, save_path=None):
     """
     Tạo báo cáo trực quan cho toàn bộ pipeline xử lý âm thanh
@@ -282,7 +282,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Trực quan hóa kết quả tìm kiếm âm nhạc")
     parser.add_argument("--audio", "-a", required=True, help="Đường dẫn đến file âm thanh")
-    parser.add_argument("--db", default="./music_features.db", help="Đường dẫn đến cơ sở dữ liệu")
+    parser.add_argument("--db", default="./database/music_features_new.db", help="Đường dẫn đến cơ sở dữ liệu")
     parser.add_argument("--method", "-m", choices=["cosine", "euclidean"], default="cosine", 
                       help="Phương pháp tính độ tương đồng")
     parser.add_argument("--top", "-t", type=int, default=3, help="Số lượng kết quả trả về")

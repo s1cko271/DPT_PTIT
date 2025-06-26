@@ -10,7 +10,7 @@ class AudioProcessingPipeline:
     Nhận âm thanh → Trích xuất đặc trưng → So sánh → Trả kết quả
     """
     
-    def __init__(self, database_path="./music_features.db", similarity_method="cosine"):
+    def __init__(self, database_path="./database/music_features_new.db", similarity_method="cosine"):
         """
         Khởi tạo pipeline xử lý âm thanh
         
@@ -105,7 +105,7 @@ class AudioProcessingPipeline:
         input_vector_norm = normalize_features(input_vector)
         
         # Lấy danh sách các đặc trưng từ database
-        from audio_search import get_feature_vectors  # Import ở đây để tránh import cycles
+        from modified_feature_extraction import get_feature_vectors  # Import từ module mới
         all_songs = get_feature_vectors(self.database_path)
         
         if verbose:
@@ -145,19 +145,19 @@ class AudioProcessingPipeline:
             song_result = {
                 'id': song['id'],
                 'title': song['title'],
-                'artist': song['artist'],
+                'genre': song['genre'],
                 'filename': song['filename']
             }
             
             if self.similarity_method.lower() == 'cosine':
                 song_result['similarity'] = similarity
                 if verbose:
-                    print(f"{i+1}. {song['title']} (Ca sĩ: {song['artist']})")
+                    print(f"{i+1}. {song['title']} (Thể loại: {song['genre']})")
                     print(f"   Độ tương đồng: {similarity:.4f}")
             else:  # euclidean
                 song_result['distance'] = -similarity  # Đổi dấu lại
                 if verbose:
-                    print(f"{i+1}. {song['title']} (Ca sĩ: {song['artist']})")
+                    print(f"{i+1}. {song['title']} (Thể loại: {song['genre']})")
                     print(f"   Khoảng cách: {-similarity:.4f}")
             
             result['results'].append(song_result)
@@ -171,7 +171,7 @@ class AudioProcessingPipeline:
         return result
 
 
-def run_pipeline(audio_path, db_path="./music_features.db", method="cosine", top_k=3):
+def run_pipeline(audio_path, db_path="./database/music_features_new.db", method="cosine", top_k=3):
     """
     Hàm tiện ích để chạy pipeline xử lý âm thanh
     
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Pipeline xử lý âm thanh")
     parser.add_argument("--audio", "-a", required=True, help="Đường dẫn đến file âm thanh")
-    parser.add_argument("--db", default="./music_features.db", help="Đường dẫn đến cơ sở dữ liệu")
+    parser.add_argument("--db", default="./database/music_features_new.db", help="Đường dẫn đến cơ sở dữ liệu")
     parser.add_argument("--method", "-m", choices=["cosine", "euclidean"], default="cosine", 
                        help="Phương pháp tính độ tương đồng")
     parser.add_argument("--top", "-t", type=int, default=3, help="Số lượng kết quả trả về")

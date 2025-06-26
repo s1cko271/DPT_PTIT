@@ -5,23 +5,19 @@ import os
 import joblib
 import io
 
-def extract_features(audio_path, frame_size=2048, hop_size=512):
+def extract_features(audio_path):
     """
-    Trích xuất đặc trưng đơn giản từ file âm thanh, không phụ thuộc thư viện phức tạp
+    Trích xuất 29 vector đặc trưng theo bars với overlap 50% + 1 vector tổng + BPM cố định
     
     Parameters:
     -----------
     audio_path : str
         Đường dẫn đến file âm thanh
-    frame_size : int
-        Kích thước khung (mặc định: 2048 mẫu)
-    hop_size : int
-        Bước nhảy giữa các khung (mặc định: 512 mẫu)
         
     Returns:
     --------
     features : dict
-        Dictionary chứa các đặc trưng âm thanh đơn giản
+        Dictionary chứa 29 vector đặc trưng + 1 vector tổng + BPM
     """
     try:
         # 1. Đọc file âm thanh
@@ -35,92 +31,128 @@ def extract_features(audio_path, frame_size=2048, hop_size=512):
         # Chuẩn hóa âm thanh
         audio = audio / (np.max(np.abs(audio)) + 1e-8)
         
-        # 2. Chia âm thanh thành các khung
-        num_frames = int((len(audio) - frame_size) / hop_size) + 1
-        frames = np.zeros((num_frames, frame_size))
+        # 2. Thiết lập tham số theo yêu cầu
+        BPM = 120  # Cố định 120 BPM cho tất cả
+        beats_per_bar = 4  # 4/4 time signature
+        bar_duration = 60 / BPM * beats_per_bar  # 2 giây cho mỗi bar
         
-        for i in range(num_frames):
-            start = i * hop_size
-            end = min(start + frame_size, len(audio))
-            frame = audio[start:end]
-            if len(frame) < frame_size:
-                # Padding nếu frame không đủ dài
-                frame = np.pad(frame, (0, frame_size - len(frame)))
-            frames[i] = frame
+        # Tính frame size và hop size
+        bar_samples = int(bar_duration * sr)  # số sample trong 1 bar (2 giây)
+        hop_samples = bar_samples // 2  # overlap 50%
         
-        # 3. Tính các đặc trưng cho từng khung
+        # 3. Chia âm thanh thành các bars với overlap 50%
+        audio_length = len(audio)
+        num_bars = int((audio_length - bar_samples) / hop_samples) + 1
         
-        # Đặc trưng 1: RMS Energy (độ to của âm thanh)
-        rms_energy = np.sqrt(np.mean(frames**2, axis=1))
+        # Đảm bảo có ít nhất 29 bars để tạo 29 vector
+        if num_bars < 29:
+            # Nếu file quá ngắn, lặp lại âm thanh để đủ 29 bars
+            repeat_times = int(np.ceil((29 * hop_samples + bar_samples) / audio_length))
+            audio = np.tile(audio, repeat_times)
+            audio_length = len(audio)
+            num_bars = int((audio_length - bar_samples) / hop_samples) + 1
         
-        # Đặc trưng 2: Zero-Crossing Rate (tần suất tín hiệu đổi dấu)
-        zcr = np.sum(np.abs(np.diff(np.signbit(frames), axis=1)), axis=1) / (2 * frame_size)
+        # Lấy chính xác 29 bars đầu tiên
+        num_bars = min(num_bars, 29)
         
-        # Đặc trưng 3-5: Spectral features
-        # Tính FFT cho từng khung
-        window = np.hamming(frame_size)
-        windowed_frames = frames * window
-        fft_frames = np.abs(np.fft.rfft(windowed_frames, axis=1))
-        frequencies = np.fft.rfftfreq(frame_size, 1/sr)
+        # 4. Trích xuất đặc trưng cho từng bar
+        bar_features = []
+        all_frame_features = []  # Lưu tất cả features để tính vector tổng
         
-        # Đặc trưng 3: Spectral Centroid (trung tâm phổ - "độ sáng")
-        spectral_centroid = np.sum(frequencies.reshape(1, -1) * fft_frames, axis=1) / (np.sum(fft_frames, axis=1) + 1e-8)
-        
-        # Đặc trưng 4: Spectral Bandwidth (độ rộng phổ)
-        spectral_bandwidth = np.sqrt(np.sum(((frequencies.reshape(1, -1) - spectral_centroid.reshape(-1, 1))**2) * fft_frames, axis=1) / (np.sum(fft_frames, axis=1) + 1e-8))
-        
-        # Đặc trưng 5: Spectral Rolloff (tần số mà 85% năng lượng nằm bên trái)
-        cumsum = np.cumsum(fft_frames, axis=1)
-        rolloff_point = 0.85 * np.sum(fft_frames, axis=1).reshape(-1, 1)
-        spectral_rolloff = np.zeros(num_frames)
-        
-        for i in range(num_frames):
-            rolloff_idx = np.where(cumsum[i] >= rolloff_point[i])[0]
-            if len(rolloff_idx) > 0:
-                spectral_rolloff[i] = frequencies[rolloff_idx[0]]
+        for bar_idx in range(num_bars):
+            # Lấy dữ liệu của bar hiện tại
+            start_sample = bar_idx * hop_samples
+            end_sample = start_sample + bar_samples
+            bar_audio = audio[start_sample:min(end_sample, audio_length)]
+            
+            # Padding nếu bar không đủ dài
+            if len(bar_audio) < bar_samples:
+                bar_audio = np.pad(bar_audio, (0, bar_samples - len(bar_audio)))
+            
+            # 5. Tính đặc trưng cho bar này
+            # Đặc trưng 1: RMS Energy
+            rms = np.sqrt(np.mean(bar_audio ** 2))
+            
+            # Đặc trưng 2: Zero-Crossing Rate  
+            zcr = np.sum(np.abs(np.diff(np.signbit(bar_audio)))) / (2 * len(bar_audio))
+            
+            # Đặc trưng 3-5: Spectral features
+            # Tính FFT
+            window = np.hamming(len(bar_audio))
+            windowed_audio = bar_audio * window
+            fft_spectrum = np.abs(np.fft.rfft(windowed_audio))
+            frequencies = np.fft.rfftfreq(len(bar_audio), 1/sr)
+            
+            # Tránh chia cho 0
+            total_spectrum = np.sum(fft_spectrum)
+            if total_spectrum == 0:
+                spectral_centroid = 0
+                spectral_bandwidth = 0
+                spectral_rolloff = 0
             else:
-                spectral_rolloff[i] = 0
+                # Spectral Centroid
+                spectral_centroid = np.sum(frequencies * fft_spectrum) / total_spectrum
+                
+                # Spectral Bandwidth
+                spectral_bandwidth = np.sqrt(np.sum(((frequencies - spectral_centroid) ** 2) * fft_spectrum) / total_spectrum)
+                
+                # Spectral Rolloff (85%)
+                cumsum_spectrum = np.cumsum(fft_spectrum)
+                rolloff_threshold = 0.85 * total_spectrum
+                rolloff_idx = np.where(cumsum_spectrum >= rolloff_threshold)[0]
+                if len(rolloff_idx) > 0:
+                    spectral_rolloff = frequencies[rolloff_idx[0]]
+                else:
+                    spectral_rolloff = 0
+            
+            # Tạo vector đặc trưng cho bar này
+            bar_feature_vector = np.array([
+                rms,
+                zcr, 
+                spectral_centroid,
+                spectral_bandwidth,
+                spectral_rolloff
+            ])
+            
+            bar_features.append(bar_feature_vector)
+            all_frame_features.append(bar_feature_vector)
         
-        # Đặc trưng 6: Tempo (BPM) bằng autocorrelation
-        # Chuẩn hóa RMS energy
-        rms_norm = rms_energy - np.mean(rms_energy)
-        rms_norm = rms_norm / (np.std(rms_norm) + 1e-8)
+        # 6. Tạo vector tổng (trung bình của 29 bars)
+        all_features_array = np.array(all_frame_features)
+        summary_vector = np.mean(all_features_array, axis=0)
         
-        # Tính autocorrelation
-        ac = np.correlate(rms_norm, rms_norm, mode='full')
-        ac = ac[len(ac)//2:]  # Chỉ lấy phần dương
-        
-        # Tìm peak đầu tiên trong vùng có ý nghĩa (60-200 BPM)
-        min_lag = int(sr / hop_size * 60 / 200)  # 200 BPM
-        max_lag = int(sr / hop_size * 60 / 60)   # 60 BPM
-        
-        # Xử lý trường hợp file quá ngắn
-        if min_lag < len(ac) and max_lag < len(ac):
-            ac_crop = ac[min_lag:max_lag]
-            lag = np.argmax(ac_crop) + min_lag
-            tempo = 60 * sr / (lag * hop_size)
-        else:
-            tempo = 120  # Giá trị mặc định nếu không tính được
-        
-        # Tổng hợp các đặc trưng - chỉ giữ 6 đặc trưng đơn giản
+        # 7. Chuẩn bị kết quả
         features = {
-            'rms_energy': np.mean(rms_energy),
-            'zcr': np.mean(zcr),
-            'spectral_centroid': np.mean(spectral_centroid),
-            'spectral_bandwidth': np.mean(spectral_bandwidth),
-            'spectral_rolloff': np.mean(spectral_rolloff),
-            'tempo': tempo
+            'bpm': BPM,
+            'num_bars': num_bars,
+            'bar_duration': bar_duration,
+            'bar_features': bar_features,  # List của 29 vector đặc trưng
+            'summary_vector': summary_vector,  # 1 vector tổng
+            
+            # Compatibility với code cũ
+            'rms_energy': summary_vector[0],
+            'zcr': summary_vector[1], 
+            'spectral_centroid': summary_vector[2],
+            'spectral_bandwidth': summary_vector[3],
+            'spectral_rolloff': summary_vector[4],
+            'tempo': BPM
         }
         
-        # Tạo thêm vector đặc trưng (dễ dàng cho tính toán khoảng cách)
-        features['feature_vector'] = np.array([
-            features['rms_energy'],
-            features['zcr'],
-            features['spectral_centroid'],
-            features['spectral_bandwidth'],
-            features['spectral_rolloff'],
-            features['tempo']
-        ])
+        # 8. Tạo feature_vector chính để so sánh
+        # Kết hợp: 29 bars * 5 features + 1 summary vector * 5 features + 1 BPM = 151 features
+        feature_vector = []
+        
+        # Thêm 29 vector bars
+        for bar_feat in bar_features:
+            feature_vector.extend(bar_feat)
+            
+        # Thêm 1 vector tổng
+        feature_vector.extend(summary_vector)
+        
+        # Thêm BPM
+        feature_vector.append(BPM)
+        
+        features['feature_vector'] = np.array(feature_vector)
         
         return features
     
@@ -147,15 +179,16 @@ def extract_and_save_features(audio_dir, db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    # Tạo bảng nếu chưa tồn tại 
+    # Tạo bảng nếu chưa tồn tại với cấu trúc hiện tại
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS songs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         filename TEXT NOT NULL,
         title TEXT,
-        artist TEXT,
-        album TEXT,
+        genre TEXT,
         features BLOB NOT NULL,
+        feature_count INTEGER,
+        feature_version TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
@@ -180,17 +213,10 @@ def extract_and_save_features(audio_dir, db_path):
             # Lấy thông tin cơ bản về file
             filename = os.path.basename(audio_path)
             
-            # Trích xuất metadata từ file nhạc
-            try:
-                audio_metadata = mutagen.File(audio_path, easy=True)
-                title = audio_metadata.get('title', [os.path.splitext(filename)[0]])[0]
-                artist = audio_metadata.get('artist', ['Unknown'])[0]
-                album = audio_metadata.get('album', ['Unknown'])[0]
-            except:
-                # Nếu không đọc được metadata, sử dụng thông tin mặc định
-                title = os.path.splitext(filename)[0]
-                artist = 'Unknown'
-                album = 'Unknown'
+            # Trích xuất thông tin từ filename
+            title = os.path.splitext(filename)[0]
+            # Lấy genre từ tên file (format: genre.number.wav)
+            genre = filename.split('.')[0] if '.' in filename else 'unknown'
             
             # Kiểm tra xem file đã tồn tại trong cơ sở dữ liệu chưa
             cursor.execute("SELECT id FROM songs WHERE filename = ?", (filename,))
@@ -199,14 +225,14 @@ def extract_and_save_features(audio_dir, db_path):
             if existing:
                 # Cập nhật nếu đã tồn tại
                 cursor.execute(
-                    "UPDATE songs SET features = ?, title = ?, artist = ?, album = ? WHERE filename = ?",
-                    (features_blob, title, artist, album, filename)
+                    "UPDATE songs SET features = ?, title = ?, genre = ?, feature_count = ?, feature_version = ? WHERE filename = ?",
+                    (features_blob, title, genre, len(features['feature_vector']), "bars_v1", filename)
                 )
             else:
                 # Thêm mới nếu chưa tồn tại
                 cursor.execute(
-                    "INSERT INTO songs (filename, title, artist, album, features) VALUES (?, ?, ?, ?, ?)",
-                    (filename, title, artist, album, features_blob)
+                    "INSERT INTO songs (filename, title, genre, features, feature_count, feature_version) VALUES (?, ?, ?, ?, ?, ?)",
+                    (filename, title, genre, features_blob, len(features['feature_vector']), "bars_v1")
                 )
             
             conn.commit()
@@ -284,22 +310,34 @@ def get_feature_vectors(db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    cursor.execute("SELECT id, filename, title, artist, features FROM songs")
+    cursor.execute("SELECT id, filename, title, genre, features FROM songs")
     results = cursor.fetchall()
     conn.close()
     
     song_features = []
     
-    for song_id, filename, title, artist, features_blob in results:
-        # Giải nén dữ liệu đặc trưng
-        features = joblib.load(io.BytesIO(features_blob))
-        
-        song_features.append({
-            'id': song_id,
-            'filename': filename,
-            'title': title,
-            'artist': artist,
-            'feature_vector': features['feature_vector']
-        })
+    for song_id, filename, title, genre, features_blob in results:
+        try:
+            # Giải nén dữ liệu đặc trưng
+            features = joblib.load(io.BytesIO(features_blob))
+            
+            # Xử lý cả format cũ (numpy array) và mới (dict)
+            if isinstance(features, dict):
+                # Format mới - features là dict
+                feature_vector = features['feature_vector']
+            else:
+                # Format cũ - features là numpy array
+                feature_vector = features
+            
+            song_features.append({
+                'id': song_id,
+                'filename': filename,
+                'title': title,
+                'genre': genre,
+                'feature_vector': feature_vector
+            })
+        except Exception as e:
+            print(f"Lỗi khi đọc features cho {filename}: {e}")
+            continue
     
     return song_features 

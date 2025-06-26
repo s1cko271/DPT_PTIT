@@ -54,7 +54,8 @@ Mặc định, chương trình sẽ trả về 3 bài hát tương tự nhất. 
 ```
 python music_search.py search path/to/query/song.mp3 --num 5
 ```
-
+ python -m streamlit run streamlit_demo.py
+ 
 ### Các tùy chọn khác
 
 - Chỉ định file cơ sở dữ liệu:
@@ -246,6 +247,5 @@ spectral_flux = np.sum(np.diff(magnitudes) ** 2)
 ## Dependencies
 
 - numpy
-- librosa
 - scipy
 - soundfile

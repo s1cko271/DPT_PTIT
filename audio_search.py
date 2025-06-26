@@ -146,7 +146,7 @@ def search_similar_songs(input_audio, db_path, metric='cosine', top_k=3):
     return results
 
 def main():
-    DB_PATH = "./music_features.db"
+    DB_PATH = "./database/music_features_new.db"
     
     # Kiểm tra database tồn tại
     if not os.path.exists(DB_PATH):
