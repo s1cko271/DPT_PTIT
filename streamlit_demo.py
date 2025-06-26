@@ -144,7 +144,7 @@ if uploaded_file is not None:
         
         # Khởi tạo pipeline với database mới
         db_path = "./database/music_features_new.db"
-        pipeline = AudioProcessingPipeline(database_path=db_path, similarity_method="cosine")
+        pipeline = AudioProcessingPipeline(database_path=db_path)
         
         # Xử lý và tìm kiếm
         start_time = time.time()

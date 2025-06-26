@@ -2,7 +2,7 @@ import os
 import time
 import numpy as np
 from modified_feature_extraction import extract_features
-from audio_search import normalize_features, cosine_similarity, euclidean_distance
+from audio_search import normalize_features, cosine_similarity
 
 class AudioProcessingPipeline:
     """
@@ -10,19 +10,16 @@ class AudioProcessingPipeline:
     Nhận âm thanh → Trích xuất đặc trưng → So sánh → Trả kết quả
     """
     
-    def __init__(self, database_path="./database/music_features_new.db", similarity_method="cosine"):
+    def __init__(self, database_path="./database/music_features_new.db"):
         """
-        Khởi tạo pipeline xử lý âm thanh
+        Khởi tạo pipeline xử lý âm thanh với Cosine similarity
         
         Parameters:
         -----------
         database_path : str
             Đường dẫn đến file cơ sở dữ liệu SQLite
-        similarity_method : str
-            Phương pháp tính toán độ tương đồng ('cosine' hoặc 'euclidean')
         """
         self.database_path = database_path
-        self.similarity_method = similarity_method
         # Kiểm tra database
         if not os.path.exists(database_path):
             print(f"Cảnh báo: Không tìm thấy cơ sở dữ liệu tại {database_path}")
@@ -97,7 +94,7 @@ class AudioProcessingPipeline:
         start_time = time.time()
         if verbose:
             print(f"\n[3. SO SÁNH ĐẶC TRƯNG]")
-            print(f"Phương pháp so sánh: {self.similarity_method}")
+            print(f"Phương pháp so sánh: Cosine Similarity")
             print("Đang so sánh với cơ sở dữ liệu...")
         
         # Lấy vector đặc trưng từ dữ liệu đầu vào
@@ -111,20 +108,15 @@ class AudioProcessingPipeline:
         if verbose:
             print(f"Tìm thấy {len(all_songs)} bản nhạc trong cơ sở dữ liệu")
             
-        # Tính toán độ tương đồng
+        # Tính toán độ tương đồng với Cosine similarity
         similarities = []
         for song in all_songs:
             song_vector = song['feature_vector']
             song_vector_norm = normalize_features(song_vector)
             
-            if self.similarity_method.lower() == 'cosine':
-                # Cao hơn = giống hơn
-                sim = cosine_similarity(input_vector_norm, song_vector_norm)
-                similarities.append((song, sim))
-            else:  # euclidean
-                # Thấp hơn = giống hơn, nhưng đảo dấu để sắp xếp giảm dần
-                dist = euclidean_distance(input_vector_norm, song_vector_norm)
-                similarities.append((song, -dist))
+            # Tính cosine similarity - giá trị cao hơn = giống hơn
+            sim = cosine_similarity(input_vector_norm, song_vector_norm)
+            similarities.append((song, sim))
         
         # Sắp xếp kết quả
         similarities.sort(key=lambda x: x[1], reverse=True)
@@ -146,19 +138,13 @@ class AudioProcessingPipeline:
                 'id': song['id'],
                 'title': song['title'],
                 'genre': song['genre'],
-                'filename': song['filename']
+                'filename': song['filename'],
+                'similarity': similarity
             }
             
-            if self.similarity_method.lower() == 'cosine':
-                song_result['similarity'] = similarity
-                if verbose:
-                    print(f"{i+1}. {song['title']} (Thể loại: {song['genre']})")
-                    print(f"   Độ tương đồng: {similarity:.4f}")
-            else:  # euclidean
-                song_result['distance'] = -similarity  # Đổi dấu lại
-                if verbose:
-                    print(f"{i+1}. {song['title']} (Thể loại: {song['genre']})")
-                    print(f"   Khoảng cách: {-similarity:.4f}")
+            if verbose:
+                print(f"{i+1}. {song['title']} (Thể loại: {song['genre']})")
+                print(f"   Độ tương đồng: {similarity:.4f}")
             
             result['results'].append(song_result)
         
@@ -171,9 +157,9 @@ class AudioProcessingPipeline:
         return result
 
 
-def run_pipeline(audio_path, db_path="./database/music_features_new.db", method="cosine", top_k=3):
+def run_pipeline(audio_path, db_path="./database/music_features_new.db", top_k=3):
     """
-    Hàm tiện ích để chạy pipeline xử lý âm thanh
+    Hàm tiện ích để chạy pipeline xử lý âm thanh với Cosine similarity
     
     Parameters:
     -----------
@@ -181,8 +167,6 @@ def run_pipeline(audio_path, db_path="./database/music_features_new.db", method=
         Đường dẫn đến file âm thanh cần xử lý
     db_path : str
         Đường dẫn đến cơ sở dữ liệu
-    method : str
-        Phương pháp tính độ tương đồng ('cosine' hoặc 'euclidean')
     top_k : int
         Số lượng kết quả trả về
         
@@ -191,7 +175,7 @@ def run_pipeline(audio_path, db_path="./database/music_features_new.db", method=
     dict
         Kết quả xử lý từ pipeline
     """
-    pipeline = AudioProcessingPipeline(database_path=db_path, similarity_method=method)
+    pipeline = AudioProcessingPipeline(database_path=db_path)
     return pipeline.process(audio_path, top_k=top_k)
 
 

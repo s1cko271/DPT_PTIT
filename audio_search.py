@@ -25,21 +25,7 @@ def cosine_similarity(v1, v2):
         
     return dot_product / (norm_v1 * norm_v2)
 
-def euclidean_distance(v1, v2):
-    """
-    Tính khoảng cách Euclidean giữa hai vector
-    
-    Parameters:
-    -----------
-    v1, v2 : numpy.ndarray
-        Hai vector đặc trưng cần tính toán khoảng cách
-        
-    Returns:
-    --------
-    distance : float
-        Khoảng cách Euclidean (giá trị từ 0 trở lên, càng thấp càng giống nhau)
-    """
-    return np.linalg.norm(v1 - v2)
+
 
 def normalize_features(feature_vector):
     """
@@ -67,9 +53,9 @@ def normalize_features(feature_vector):
         
     return (feature_vector - min_val) / (max_val - min_val)
 
-def search_similar_songs(input_audio, db_path, metric='cosine', top_k=3):
+def search_similar_songs(input_audio, db_path, top_k=3):
     """
-    Tìm kiếm những bài hát tương tự dựa trên đặc trưng âm thanh
+    Tìm kiếm những bài hát tương tự dựa trên đặc trưng âm thanh sử dụng Cosine similarity
     
     Parameters:
     -----------
@@ -77,15 +63,13 @@ def search_similar_songs(input_audio, db_path, metric='cosine', top_k=3):
         Đường dẫn đến file âm thanh cần tìm kiếm
     db_path : str
         Đường dẫn đến file cơ sở dữ liệu SQLite
-    metric : str, optional
-        Phương pháp tính độ tương đồng ('cosine' hoặc 'euclidean')
     top_k : int, optional
         Số lượng kết quả trả về
         
     Returns:
     --------
     results : list
-        Danh sách các bài hát tương tự nhất, mỗi phần tử là một tuple (song_info, similarity)
+        Danh sách các bài hát tương tự nhất, mỗi phần tử là một dict với thông tin bài hát và similarity
     """
     # Trích xuất đặc trưng từ file âm thanh đầu vào
     input_features = extract_features(input_audio)
@@ -100,20 +84,15 @@ def search_similar_songs(input_audio, db_path, metric='cosine', top_k=3):
     # Lấy danh sách các vector đặc trưng từ cơ sở dữ liệu
     all_songs = get_feature_vectors(db_path)
     
-    # Tính toán độ tương đồng với từng bài hát
+    # Tính toán độ tương đồng với từng bài hát sử dụng Cosine similarity
     similarities = []
     for song in all_songs:
         song_vector = song['feature_vector']
         song_vector_norm = normalize_features(song_vector)
         
-        if metric.lower() == 'cosine':
-            # Với cosine similarity, giá trị càng lớn càng giống nhau
-            sim = cosine_similarity(input_vector_norm, song_vector_norm)
-            similarities.append((song, sim))
-        else:  # euclidean
-            # Với euclidean distance, giá trị càng nhỏ càng giống nhau
-            dist = euclidean_distance(input_vector_norm, song_vector_norm)
-            similarities.append((song, -dist))  # Đổi dấu để sắp xếp giảm dần
+        # Tính cosine similarity - giá trị càng lớn càng giống nhau
+        sim = cosine_similarity(input_vector_norm, song_vector_norm)
+        similarities.append((song, sim))
     
     # Sắp xếp theo độ tương đồng giảm dần
     similarities.sort(key=lambda x: x[1], reverse=True)
@@ -124,24 +103,13 @@ def search_similar_songs(input_audio, db_path, metric='cosine', top_k=3):
     # Định dạng lại kết quả
     results = []
     for song, sim in top_results:
-        if metric.lower() == 'cosine':
-            # Giữ nguyên giá trị cosine
-            results.append({
-                'id': song['id'],
-                'title': song['title'],
-                'artist': song['artist'],
-                'filename': song['filename'],
-                'similarity': sim
-            })
-        else:  # euclidean
-            # Chuyển lại thành giá trị dương cho khoảng cách
-            results.append({
-                'id': song['id'],
-                'title': song['title'],
-                'artist': song['artist'],
-                'filename': song['filename'],
-                'distance': -sim  # Đổi dấu lại để hiển thị khoảng cách thực
-            })
+        results.append({
+            'id': song['id'],
+            'title': song['title'],
+            'artist': song['artist'],
+            'filename': song['filename'],
+            'similarity': sim
+        })
     
     return results
 
@@ -162,18 +130,11 @@ def main():
     print("\nĐang tìm kiếm bài hát tương tự...")
     
     # Tìm kiếm sử dụng Cosine similarity
-    print("\n=== Kết quả sử dụng Cosine similarity ===")
-    cosine_results = search_similar_songs(input_audio, DB_PATH, metric='cosine', top_k=3)
-    for i, result in enumerate(cosine_results):
+    print("\n=== Kết quả tìm kiếm ===")
+    results = search_similar_songs(input_audio, DB_PATH, top_k=3)
+    for i, result in enumerate(results):
         print(f"{i+1}. {result['title']} (Ca sĩ: {result['artist']})")
         print(f"   Độ tương đồng: {result['similarity']:.4f}")
-    
-    # Tìm kiếm sử dụng Euclidean distance
-    print("\n=== Kết quả sử dụng Euclidean distance ===")
-    euclidean_results = search_similar_songs(input_audio, DB_PATH, metric='euclidean', top_k=3)
-    for i, result in enumerate(euclidean_results):
-        print(f"{i+1}. {result['title']} (Ca sĩ: {result['artist']})")
-        print(f"   Khoảng cách: {result['distance']:.4f}")
 
 if __name__ == "__main__":
     main() 
